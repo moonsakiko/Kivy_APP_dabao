@@ -1,24 +1,23 @@
 [app]
-# 1. 基本信息
-title = PDF Tool Simple
-package.name = pdftoolsimple
-package.domain = org.simple
+title = PDF Tool Pro
+package.name = pdftoolpro
+package.domain = org.pro
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas
-version = 3.0
+# ❗关键：加入 ttf 后缀，否则字体不会被打包
+source.include_exts = py,png,jpg,kv,atlas,ttf
+version = 4.0
 
-# 2. ❗❗❗ 核心修改：移除 kivymd，Kivy 降级到 2.2.0 ❗❗❗
-requirements = python3, kivy==2.2.0, pypdf, pillow, android
+# ❗关键配合：Kivy 2.2.0 (稳) + KivyMD 1.1.1 (美)
+requirements = python3, kivy==2.2.0, kivymd==1.1.1, pypdf, pillow, android
 
-# 3. 屏幕设置
 orientation = portrait
 fullscreen = 0
-android.presplash_color = #000000
+# 启动图颜色改为 KivyMD 的深蓝色，显得专业
+android.presplash_color = #1E1E1E
 
-# 4. 权限 (只保留最基础的)
+# 权限
 android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
 
-# 5. API 版本
 android.api = 33
 android.minapi = 21
 android.ndk_api = 21

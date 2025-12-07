@@ -1,147 +1,194 @@
 import os
 import traceback
-from kivy.app import App
+from kivy.core.text import LabelBase
+from kivy.lang import Builder
 from kivy.clock import Clock
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
-from kivy.uix.label import Label
-from kivy.uix.textinput import TextInput
-from kivy.uix.popup import Popup
-from kivy.uix.filechooser import FileChooserListView
 from kivy.utils import platform
 
-# 保持懒加载，防止启动崩溃
-# from pypdf import ... (不要在这里导入)
+# 1. 强行注册中文字体 (解决方框乱码的核心)
+# 只要你上传了 font.ttf，这里就会生效
+try:
+    LabelBase.register(name="Roboto", fn_regular="font.ttf")
+    LabelBase.register(name="Roboto-Bold", fn_regular="font.ttf")
+except:
+    pass # 防止电脑端测试如果没有字体报错
 
-class PDFApp(App):
+from kivymd.app import MDApp
+from kivymd.uix.filemanager import MDFileManager
+from kivymd.toast import toast
+from kivymd.uix.dialog import MDDialog
+from kivymd.uix.button import MDFlatButton
+
+# 界面布局 (Material Design 风格)
+KV = '''
+MDBoxLayout:
+    orientation: 'vertical'
+
+    MDTopAppBar:
+        title: "PDF 工具箱"
+        elevation: 2
+        md_bg_color: .2, .2, .2, 1
+        specific_text_color: 1, 1, 1, 1
+
+    MDBoxLayout:
+        orientation: 'vertical'
+        padding: dp(20)
+        spacing: dp(20)
+
+        # 状态卡片
+        MDCard:
+            size_hint_y: None
+            height: dp(60)
+            radius: [10,]
+            md_bg_color: .9, .9, .9, 1
+            padding: dp(10)
+            
+            MDLabel:
+                id: status_label
+                text: "准备就绪 (KivyMD 版)"
+                halign: "center"
+                theme_text_color: "Primary"
+                font_style: "Subtitle1"
+
+        # 功能区
+        MDTextField:
+            id: field_path
+            hint_text: "当前文件路径"
+            helper_text: "请点击下方按钮选择文件"
+            helper_text_mode: "persistent"
+            readonly: True
+            multiline: False
+
+        MDRaisedButton:
+            text: "📂 选择 PDF 文件"
+            pos_hint: {"center_x": .5}
+            md_bg_color: 0, 0.4, 0.8, 1
+            size_hint_x: 0.8
+            on_release: app.file_manager_open()
+
+        MDTextField:
+            id: field_range
+            hint_text: "输入页码 (例如: 1-5, 8)"
+            helper_text: "支持逗号和连字符"
+            helper_text_mode: "on_focus"
+
+        MDRaisedButton:
+            text: "🚀 开始提取"
+            pos_hint: {"center_x": .5}
+            md_bg_color: 0, 0.6, 0.2, 1
+            size_hint_x: 0.8
+            on_release: app.do_extract()
+
+        Widget: # 占位符，把内容顶上去
+'''
+
+class PDFToolApp(MDApp):
     def build(self):
-        self.selected_file = None
-        self.merge_list = []
-        
-        # 主布局
-        self.layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        
-        # 1. 状态标签
-        self.status_label = Label(text="状态: 就绪 (Kivy 2.2.0)", size_hint_y=0.1, color=(0, 1, 0, 1))
-        self.layout.add_widget(self.status_label)
+        self.theme_cls.theme_style = "Light"
+        self.theme_cls.primary_palette = "Blue"
+        self.file_manager = MDFileManager(
+            exit_manager=self.exit_manager,
+            select_path=self.select_path,
+            preview=False, # 关闭预览防止卡顿
+        )
+        return Builder.load_string(KV)
 
-        # 2. 文件路径显示
-        self.path_label = Label(text="未选择文件", size_hint_y=0.1)
-        self.layout.add_widget(self.path_label)
+    def on_start(self):
+        if platform == 'android':
+            Clock.schedule_once(self.request_perms, 1)
 
-        # 3. 选择文件按钮
-        btn_select = Button(text="选择 PDF 文件", size_hint_y=0.1)
-        btn_select.bind(on_release=self.show_file_chooser)
-        self.layout.add_widget(btn_select)
-
-        # 4. 页码输入框
-        self.input_range = TextInput(hint_text="输入页码 (如 1-5)", size_hint_y=0.1, multiline=False)
-        self.layout.add_widget(self.input_range)
-
-        # 5. 提取按钮
-        btn_extract = Button(text="执行提取", size_hint_y=0.1, background_color=(0, 0.5, 1, 1))
-        btn_extract.bind(on_release=self.do_extract)
-        self.layout.add_widget(btn_extract)
-        
-        # 6. 权限按钮 (手动触发)
-        btn_perm = Button(text="申请权限 (如果无法读取请点我)", size_hint_y=0.1)
-        btn_perm.bind(on_release=self.request_perms)
-        self.layout.add_widget(btn_perm)
-
-        return self.layout
-
-    def log(self, msg, error=False):
-        self.status_label.text = msg
-        self.status_label.color = (1, 0, 0, 1) if error else (0, 1, 0, 1)
+    def log(self, text):
+        self.root.ids.status_label.text = text
 
     def request_perms(self, *args):
-        if platform == 'android':
-            try:
-                from android.permissions import request_permissions
-                request_permissions([
-                    "android.permission.READ_EXTERNAL_STORAGE", 
-                    "android.permission.WRITE_EXTERNAL_STORAGE"
-                ])
-                self.log("权限申请已发送")
-            except Exception as e:
-                self.log(f"权限错误: {e}", True)
-
-    def show_file_chooser(self, *args):
-        # 简单的原生文件选择弹窗
-        content = BoxLayout(orientation='vertical')
-        
-        # 默认路径
-        path = "/storage/emulated/0/Download" if platform == 'android' else os.path.expanduser("~")
-        if not os.path.exists(path): path = "/"
-            
-        filechooser = FileChooserListView(path=path, filters=['*.pdf'])
-        
-        btn_box = BoxLayout(size_hint_y=0.1)
-        btn_cancel = Button(text="取消")
-        btn_select = Button(text="确定")
-        
-        btn_box.add_widget(btn_cancel)
-        btn_box.add_widget(btn_select)
-        content.add_widget(filechooser)
-        content.add_widget(btn_box)
-        
-        popup = Popup(title="选择文件", content=content, size_hint=(0.9, 0.9))
-        
-        def select(instance):
-            if filechooser.selection:
-                self.selected_file = filechooser.selection[0]
-                self.path_label.text = os.path.basename(self.selected_file)
-                self.log("已选择: " + self.path_label.text)
-            popup.dismiss()
-            
-        btn_cancel.bind(on_release=popup.dismiss)
-        btn_select.bind(on_release=select)
-        popup.open()
-
-    def do_extract(self, *args):
         try:
+            from android.permissions import request_permissions
+            request_permissions([
+                "android.permission.READ_EXTERNAL_STORAGE",
+                "android.permission.WRITE_EXTERNAL_STORAGE"
+            ])
+        except:
+            pass
+
+    # --- 文件管理器 ---
+    def file_manager_open(self):
+        # 优先打开 Download 目录
+        path = "/storage/emulated/0/Download" if platform == 'android' else os.path.expanduser("~")
+        if not os.path.exists(path):
+            path = "/storage/emulated/0"
+        self.file_manager.show(path)
+
+    def select_path(self, path):
+        self.exit_manager()
+        if path.endswith(".pdf"):
+            self.root.ids.field_path.text = path
+            self.log(f"已选中: {os.path.basename(path)}")
+            toast(f"选中: {os.path.basename(path)}")
+        else:
+            toast("请选择 PDF 文件")
+
+    def exit_manager(self, *args):
+        self.file_manager.close()
+
+    # --- 提取逻辑 ---
+    def do_extract(self):
+        try:
+            # 懒加载
             from pypdf import PdfReader, PdfWriter
         except ImportError:
-            self.log("错误: pypdf 库未安装", True)
+            self.log("错误: 缺少 pypdf 库")
             return
 
-        if not self.selected_file:
-            self.log("请先选择文件!", True)
+        path = self.root.ids.field_path.text
+        if not path or not os.path.exists(path):
+            toast("请先选择有效文件")
             return
 
-        range_str = self.input_range.text.strip()
-        if not range_str:
-            self.log("请输入页码!", True)
+        page_str = self.root.ids.field_range.text
+        if not page_str:
+            toast("请输入页码")
             return
 
         try:
-            reader = PdfReader(self.selected_file)
+            reader = PdfReader(path)
             writer = PdfWriter()
             
+            # 简单的页码解析
             indices = []
-            for part in range_str.replace(' ', '').split(','):
+            for part in page_str.replace(' ', '').split(','):
                 if '-' in part:
                     s, e = part.split('-')
                     indices.extend(range(int(s)-1, len(reader.pages) if e=='end' else int(e)))
                 else:
                     indices.append(int(part)-1)
 
-            writer.append(fileobj=self.selected_file, pages=indices)
+            writer.append(fileobj=path, pages=indices)
             
+            # 保存到 Download
             save_dir = "/storage/emulated/0/Download" if platform == 'android' else "."
-            out_name = f"extracted_{os.path.basename(self.selected_file)}"
+            out_name = f"提取_{os.path.basename(path)}"
             out_path = os.path.join(save_dir, out_name)
             
             with open(out_path, "wb") as f:
                 writer.write(f)
             
-            self.log(f"成功保存至 Download 目录")
+            self.log("✅ 成功！已保存至 Download")
+            self.show_success_dialog(out_path)
             
         except Exception as e:
-            self.log(f"失败: {str(e)}", True)
+            self.log(f"❌ 失败: {str(e)}")
+            toast(f"出错: {str(e)}")
+
+    def show_success_dialog(self, path):
+        dialog = MDDialog(
+            title="处理完成",
+            text=f"文件已保存:\n{path}",
+            buttons=[MDFlatButton(text="好的", on_release=lambda x: dialog.dismiss())]
+        )
+        dialog.open()
 
 if __name__ == '__main__':
     try:
-        PDFApp().run()
+        PDFToolApp().run()
     except Exception as e:
-        print(f"CRASH: {e}")
+        print(e)

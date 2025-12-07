@@ -14,38 +14,23 @@ from kivy.uix.scrollview import ScrollView
 from kivy.utils import platform
 from kivy.graphics import Color, RoundedRectangle, Rectangle
 
-# --- 1. 字体注入 ---
-# 必须上传 font.ttf
+# --- 字体注入 ---
 try:
     LabelBase.register(name='Roboto', fn_regular='font.ttf')
     LabelBase.register(name='Roboto-Bold', fn_regular='font.ttf')
 except:
     pass
 
-# --- 2. 安卓原生接口 ---
-if platform == 'android':
-    from jnius import autoclass, cast
-    from android import activity
-    PythonActivity = autoclass('org.kivy.android.PythonActivity')
-    currentActivity = cast('android.app.Activity', PythonActivity.mActivity)
-    Intent = autoclass('android.content.Intent')
-    Context = autoclass('android.content.Context')
-
-# --- 3. UI 组件 ---
-
+# --- UI 组件 (保持你的美观布局) ---
 class Card(BoxLayout):
-    """带边框的圆角卡片"""
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.padding = '20dp'
         with self.canvas.before:
-            # 边框阴影
-            Color(0.85, 0.85, 0.88, 1)
+            Color(0.9, 0.9, 0.92, 1) # 边框色
             self.border = RoundedRectangle(size=self.size, pos=self.pos, radius=[16,])
-            # 内容背景
-            Color(1, 1, 1, 1)
-            self.rect = RoundedRectangle(size=(self.width, self.height-2), pos=(self.x, self.y+1), radius=[15,])
-            
+            Color(1, 1, 1, 1) # 内容色
+            self.rect = RoundedRectangle(size=(self.width, self.height-2), pos=(self.x, self.y+1), radius=[15,])   
         self.bind(size=self._update_rect, pos=self._update_rect)
 
     def _update_rect(self, instance, value):
@@ -55,18 +40,14 @@ class Card(BoxLayout):
         self.rect.size = (instance.width - 2, instance.height - 2)
 
 class ActionButton(ButtonBehavior, FloatLayout):
-    """大圆角按钮"""
     def __init__(self, text="", bg_color=(0.2, 0.6, 1, 1), text_color=(1,1,1,1), **kwargs):
         super().__init__(**kwargs)
         self.size_hint_y = None
         self.height = '60dp'
         self.bg_color = bg_color
-        
         with self.canvas.before:
             self.color_node = Color(*bg_color)
             self.rect = RoundedRectangle(size=self.size, pos=self.pos, radius=[12,])
-        
-        # 移除 font_name='font.ttf' 这里，依靠全局替换，避免未加载报错
         self.label = Label(text=text, pos_hint={'center_x': .5, 'center_y': .5}, 
                            font_size='18sp', bold=True, color=text_color)
         self.add_widget(self.label)
@@ -81,80 +62,57 @@ class ActionButton(ButtonBehavior, FloatLayout):
     def on_release(self):
         self.color_node.rgba = self.bg_color
 
-# --- 4. 主程序 ---
+# --- 主程序 ---
 class PDFApp(App):
     cached_pdf_path = None 
     
     def build(self):
+        # 延迟绑定，防止启动时 JNI 未就绪导致闪退
         if platform == 'android':
-            activity.bind(on_activity_result=self.on_android_result)
+            Clock.schedule_once(self.bind_android_callback, 1)
 
-        # 根布局：浅灰背景
         root = FloatLayout()
         with root.canvas.before:
-            Color(0.96, 0.97, 0.98, 1)
+            Color(0.97, 0.97, 0.98, 1)
             Rectangle(size=(3000, 3000), pos=(0,0))
 
-        layout = BoxLayout(orientation='vertical', padding='24dp', spacing='20dp')
+        layout = BoxLayout(orientation='vertical', padding='24dp', spacing='15dp')
         
-        # --- 标题栏 ---
-        header = BoxLayout(orientation='vertical', size_hint_y=None, height='80dp', spacing='5dp')
-        title = Label(text="PDF 工具箱", font_size='32sp', color=(0.1, 0.15, 0.2, 1), 
-                      bold=True, size_hint_x=None, width='300dp', halign='left')
-        subtitle = Label(text="简洁 高效 稳定", font_size='14sp', color=(0.5, 0.5, 0.6, 1),
-                         size_hint_x=None, width='300dp', halign='left')
+        # 标题
+        header = BoxLayout(orientation='vertical', size_hint_y=None, height='70dp')
+        title = Label(text="PDF 工具箱", font_size='28sp', color=(0.1, 0.1, 0.1, 1), bold=True, halign='left', size_hint_x=None, width='300dp')
         title.bind(texture_size=title.setter('size'))
         header.add_widget(title)
-        header.add_widget(subtitle)
         layout.add_widget(header)
 
-        # --- 核心操作区 ---
-        main_card = Card(orientation='vertical', size_hint_y=None, height='280dp', spacing='15dp')
+        # 操作卡片
+        main_card = Card(orientation='vertical', size_hint_y=None, height='260dp', spacing='15dp')
         
-        # 1. 文件按钮
-        lbl_file = Label(text="第一步: 选择文件", color=(0.4,0.4,0.4,1), size_hint_y=None, height='20dp', halign='left', text_size=(500, None))
-        main_card.add_widget(lbl_file)
-        
-        self.path_btn = ActionButton(text="点击选择 PDF 文件", bg_color=(0.92, 0.94, 0.96, 1), text_color=(0.2, 0.4, 0.7, 1))
+        main_card.add_widget(Label(text="步骤 1: 选择文件", color=(0.5,0.5,0.5,1), size_hint_y=None, height='20dp', halign='left', text_size=(500, None)))
+        self.path_btn = ActionButton(text="点击选择 PDF", bg_color=(0.93, 0.95, 0.97, 1), text_color=(0.2, 0.4, 0.7, 1))
         self.path_btn.bind(on_release=self.open_android_picker)
         main_card.add_widget(self.path_btn)
         
-        # 2. 页码输入
-        lbl_range = Label(text="第二步: 输入页码 (如 1-5, 8)", color=(0.4,0.4,0.4,1), size_hint_y=None, height='20dp', halign='left', text_size=(500, None))
-        main_card.add_widget(lbl_range)
-        
-        self.range_input = TextInput(
-            multiline=False, size_hint_y=None, height='50dp',
-            hint_text="点击此处输入...",
-            background_color=(0.98, 0.98, 0.99, 1), cursor_color=(0,0,0,1),
-            padding=[15, 15]
-        )
+        main_card.add_widget(Label(text="步骤 2: 输入范围 (如 1-5)", color=(0.5,0.5,0.5,1), size_hint_y=None, height='20dp', halign='left', text_size=(500, None)))
+        self.range_input = TextInput(multiline=False, size_hint_y=None, height='50dp', hint_text="在此输入...", background_color=(0.98,0.98,0.99,1), cursor_color=(0,0,0,1))
         main_card.add_widget(self.range_input)
         
         layout.add_widget(main_card)
 
-        # --- 开始按钮 ---
-        btn_run = ActionButton(text="开始提取", bg_color=(0.2, 0.4, 0.85, 1))
+        # 执行按钮
+        btn_run = ActionButton(text="开始提取", bg_color=(0.1, 0.65, 0.3, 1))
         btn_run.bind(on_release=self.do_extract)
         layout.add_widget(btn_run)
 
-        # --- 进度条 ---
+        # 进度条
         self.progress = ProgressBar(max=100, value=0, size_hint_y=None, height='4dp', opacity=0)
         layout.add_widget(self.progress)
 
-        # --- 日志区域 ---
+        # 日志
         log_scroll = ScrollView(size_hint_y=1)
-        self.console_log = Label(
-            text="[系统] 准备就绪", 
-            color=(0.6, 0.6, 0.65, 1),
-            font_size='13sp',
-            size_hint_y=None,
-            halign='left', valign='top',
-            markup=True
-        )
+        self.console_log = Label(text="系统就绪...", color=(0.6, 0.6, 0.65, 1), font_size='13sp', size_hint_y=None, halign='left', valign='top', markup=True)
         self.console_log.bind(texture_size=self.console_log.setter('size'))
         self.console_log.bind(width=lambda instance, value: setattr(instance, 'text_size', (value, None)))
-        
         log_scroll.add_widget(self.console_log)
         layout.add_widget(log_scroll)
 
@@ -162,102 +120,96 @@ class PDFApp(App):
         return root
 
     def log(self, msg, level="INFO"):
-        time_str = datetime.datetime.now().strftime("%H:%M:%S")
-        color_hex = "666666"
-        if level == "ERROR": color_hex = "ff4444"
-        elif level == "SUCCESS": color_hex = "00aa44"
-        
-        # 使用 str() 强制转换，防止打印对象时报错
-        safe_msg = str(msg)
-        new_line = f"[color=#{color_hex}][b]• {safe_msg}[/b][/color]\n"
-        self.console_log.text = new_line + self.console_log.text
+        color = "666666"
+        if level == "ERROR": color = "ff4444"
+        elif level == "SUCCESS": color = "00aa44"
+        self.console_log.text = f"[color=#{color}]• {str(msg)}[/color]\n" + self.console_log.text
 
-    # --- 修复后的 Android 原生选择 ---
+    # --- 修复后的 Android 逻辑 ---
+    
+    def bind_android_callback(self, dt):
+        try:
+            from android import activity
+            activity.bind(on_activity_result=self.on_android_result)
+        except:
+            self.log("非安卓环境", "WARN")
+
     def open_android_picker(self, *args):
         if platform == 'android':
             try:
-                # 简化 Intent，去除 createChooser，防止 LocalRef 错误
+                # ❗局部导入 jnius，防止全局加载崩溃
+                from jnius import autoclass, cast
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                currentActivity = cast('android.app.Activity', PythonActivity.mActivity)
+                Intent = autoclass('android.content.Intent')
+
                 intent = Intent()
                 intent.setAction(Intent.ACTION_GET_CONTENT)
                 intent.setType("application/pdf")
-                # 不添加 Category，防止部分机型不兼容
+                # ❗最原始的调用，不加 createChooser 标题，防止 JNI 字符串崩溃
                 currentActivity.startActivityForResult(intent, 101)
-                self.log("正在打开系统选择器...")
+                self.log("正在打开...")
             except Exception as e:
-                self.log(f"启动失败: {str(e)}", "ERROR")
+                self.log(f"启动失败: {e}", "ERROR")
 
     def on_android_result(self, requestCode, resultCode, intent):
-        try:
-            if requestCode == 101:
-                if resultCode == -1 and intent is not None: # RESULT_OK
-                    uri = intent.getData()
-                    self.copy_uri_to_cache(uri)
-                else:
-                    self.log("未选择文件", "INFO")
-        except Exception as e:
-            self.log(f"回调错误: {str(e)}", "ERROR")
-
-    def copy_uri_to_cache(self, uri):
-        try:
-            self.log("正在读取文件...")
-            resolver = currentActivity.getContentResolver()
-            input_stream = resolver.openInputStream(uri)
-            
-            # 临时文件
-            cache_dir = currentActivity.getCacheDir().getAbsolutePath()
-            output_path = os.path.join(cache_dir, "temp_target.pdf")
-            
-            # 使用 Java 流进行复制 (最稳妥的方式)
-            FileOutputStream = autoclass('java.io.FileOutputStream')
-            output_stream = FileOutputStream(output_path)
-            
-            # 手动 Buffer 复制，避免 jnius 传递大对象卡死
-            # 我们这里分块读取，但为了避免 jnius byte[] 转换的复杂性
-            # 我们尝试直接读完 (如果文件不是特别巨大的话，通常没问题)
-            # 或者，更简单：告诉用户我们成功了，让 pypdf 直接读 uri? 不行 pypdf 不支持 uri
-            
-            # 采用 Kivy 社区推荐的简易复制法
-            byte_arr = bytearray(1024 * 256) # 256KB 缓存
-            while True:
-                n = input_stream.read(byte_arr)
-                if n <= 0: break
-                output_stream.write(byte_arr[:n])
-            
-            input_stream.close()
-            output_stream.close()
-            
-            self.cached_pdf_path = output_path
-            
-            # 更新界面
-            self.path_btn.label.text = "已加载 PDF 文件"
-            self.path_btn.label.color = (0.1, 0.6, 0.3, 1) # 绿色文字
-            self.log("文件加载成功！", "SUCCESS")
-            
-        except Exception as e:
-            self.log(f"解析错误: {str(e)}", "ERROR")
+        if requestCode == 101 and resultCode == -1 and intent:
+            try:
+                # ❗局部导入，防止引用泄漏
+                from jnius import autoclass, cast
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                currentActivity = cast('android.app.Activity', PythonActivity.mActivity)
+                
+                uri = intent.getData()
+                self.log("文件已选择，正在解析...")
+                
+                # 简单的流复制
+                resolver = currentActivity.getContentResolver()
+                input_stream = resolver.openInputStream(uri)
+                cache_dir = currentActivity.getCacheDir().getAbsolutePath()
+                output_path = os.path.join(cache_dir, "temp.pdf")
+                
+                FileOutputStream = autoclass('java.io.FileOutputStream')
+                output_stream = FileOutputStream(output_path)
+                
+                # 降低 buffer 大小，防止内存压力
+                byte_arr = bytearray(1024 * 64) 
+                while True:
+                    n = input_stream.read(byte_arr)
+                    if n <= 0: break
+                    output_stream.write(byte_arr[:n])
+                
+                input_stream.close()
+                output_stream.close()
+                
+                self.cached_pdf_path = output_path
+                self.path_btn.label.text = "✅ 文件已加载"
+                self.path_btn.label.color = (0.1, 0.5, 0.2, 1)
+                self.log("加载成功！", "SUCCESS")
+                
+            except Exception as e:
+                self.log(f"解析文件失败: {e}", "ERROR")
+        else:
+            self.log("未选择文件")
 
     # --- 提取逻辑 ---
     def do_extract(self, *args):
-        if not self.cached_pdf_path or not os.path.exists(self.cached_pdf_path):
+        if not self.cached_pdf_path:
             self.log("请先选择文件", "ERROR")
             return
-
         range_str = self.range_input.text
         if not range_str:
-            self.log("请输入页码范围", "ERROR")
+            self.log("请输入页码", "ERROR")
             return
 
         self.progress.opacity = 1
         self.progress.value = 10
-        self.log("正在处理...", "INFO")
-        
         Clock.schedule_once(lambda dt: self._process(range_str), 0.1)
 
     def _process(self, range_str):
         try:
             from pypdf import PdfReader, PdfWriter
-            self.progress.value = 20
-            
+            self.progress.value = 30
             reader = PdfReader(self.cached_pdf_path)
             writer = PdfWriter()
             
@@ -272,29 +224,24 @@ class PDFApp(App):
                 else:
                     indices.append(int(part)-1)
 
-            self.progress.value = 60
             writer.append(fileobj=self.cached_pdf_path, pages=indices)
             
             save_dir = "/storage/emulated/0/Download"
-            out_path = os.path.join(save_dir, "PDF提取结果.pdf")
-            
+            out_path = os.path.join(save_dir, "PDF_Result.pdf")
             c = 1
             while os.path.exists(out_path):
-                out_path = os.path.join(save_dir, f"PDF提取结果_{c}.pdf")
+                out_path = os.path.join(save_dir, f"PDF_Result_{c}.pdf")
                 c += 1
             
-            self.progress.value = 90
             with open(out_path, "wb") as f:
                 writer.write(f)
             
             self.progress.value = 100
-            self.log(f"成功！已保存至 Download 文件夹", "SUCCESS")
-            
-            # 延迟隐藏
+            self.log(f"成功！已保存到 Download", "SUCCESS")
             Clock.schedule_once(lambda dt: setattr(self.progress, 'opacity', 0), 3)
             
         except Exception as e:
-            self.log(f"处理失败: {str(e)}", "ERROR")
+            self.log(f"处理出错: {e}", "ERROR")
             self.progress.opacity = 0
 
 if __name__ == '__main__':

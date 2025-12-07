@@ -5,16 +5,18 @@ package.domain = org.master
 source.dir = .
 # 记得保留 ttf
 source.include_exts = py,png,jpg,kv,atlas,ttf
-version = 7.0
+version = 8.0
 
-# ❗❗❗ 核心修改：增加了 plyer 库 ❗❗❗
-requirements = python3, kivy==2.3.0, pypdf, pillow, plyer, android
+# ❗依赖：去掉 plyer，我们用更底层的 android
+requirements = python3, kivy==2.3.0, pypdf, pillow, android
 
 orientation = portrait
 fullscreen = 0
-android.presplash_color = #FFFFFF
 
-# 权限 (plyer 需要读写权限)
+# ❗美化启动页：设为极简白，跟APP背景融为一体，产生“秒开”的错觉
+android.presplash_color = #F5F5F7
+
+# 权限
 android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
 
 android.api = 33

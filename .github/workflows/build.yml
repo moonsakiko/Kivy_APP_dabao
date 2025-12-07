@@ -10,7 +10,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # 清理空间，因为Kivy打包很占地
+      # 1. 清理空间 (Kivy打包非常吃硬盘，这一步不能省)
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
         with:
@@ -21,15 +21,16 @@ jobs:
           large-packages: true
           swap-storage: true
 
-      # 开始打包
+      # 2. 开始打包
+      # ⚠️ 之前报错是因为这里多了个 "-v1"，现在修正了
       - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action-v1@v3
+        uses: ArtemSBulgakov/buildozer-action@v1
         id: buildozer
         with:
           command: buildozer android debug
           buildozer_version: stable
 
-      # 上传 APK
+      # 3. 上传 APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

@@ -1,54 +1,65 @@
-[app]
+name: Stable Build
+on:
+  workflow_dispatch:
 
-# (str) APP标题 (安装后在手机上显示的名字)
-title = PDF Tool
+jobs:
+  build:
+    # 使用 Ubuntu 20.04 或 22.04，这两个版本编译 Python 最稳
+    runs-on: ubuntu-22.04
 
-# (str) 包名 (建议全小写)
-package.name = pdftool
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
 
-# (str) 域名 (通常反写，如 org.test)
-package.domain = org.example
+      # 1. 清理磁盘 (必须，否则编译到一半空间不足)
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
 
-# (str) 源码目录 (当前目录用 .)
-source.dir = .
+      # 2. 手动安装依赖 (比第三方Action更稳)
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libltdl-dev \
+            libffi-dev \
+            libssl-dev \
+            python3-dev \
+            python3-setuptools \
+            zip \
+            unzip \
+            autoconf \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            libtinfo5 \
+            cmake \
+            libffi-dev
 
-# (list) 源码包含的文件后缀
-source.include_exts = py,png,jpg,kv,atlas
+      # 3. 安装 Buildozer
+      - name: Install Buildozer
+        run: |
+          pip3 install --upgrade pip
+          pip3 install buildozer cython==0.29.36
 
-# (str) 版本号
-version = 1.0
+      # 4. 开始打包 (yes | ... 自动同意SDK协议)
+      # 这里加 verbose 可以在 Github 后台看到详细日志
+      - name: Build APK
+        run: |
+          yes | buildozer android debug verbose
 
-# ❗❗❗【关键修改：防闪退核心】❗❗❗
-# 必须包含 pypdf，否则APP一运行到提取功能就会直接崩
-requirements = python3, kivy, pypdf
-
-# (str) 屏幕方向 (portrait=竖屏, landscape=横屏)
-orientation = portrait
-
-# (bool) 是否全屏
-fullscreen = 0
-
-# ❗❗❗【关键修改：权限】❗❗❗
-# 必须申请读写权限，否则无法扫描 Download 文件夹
-android.permissions = INTERNET, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE
-
-# (int) Android API 版本 (默认 31 对应 Android 12，兼容性较好)
-android.api = 31
-# (int) 最小支持版本 (21 对应 Android 5.0)
-android.minapi = 21
-
-# (bool) 是否开启 Logcat 日志 (调试用，正式版可改为 0)
-android.logcat_filters = *:S python:D
-
-# (str) 架构支持 (同时打包两种架构，兼容所有手机)
-android.archs = arm64-v8a, armeabi-v7a
-
-# (bool) 允许备份
-android.allow_backup = True
-
-# -----------------------------------------------------------------------------
-# Buildozer 专用配置 (不用改)
-# -----------------------------------------------------------------------------
-[buildozer]
-log_level = 2
-warn_on_root = 1
+      # 5. 上传
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: bin/*.apk

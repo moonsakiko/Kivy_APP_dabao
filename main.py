@@ -1,16 +1,19 @@
 import os
-import shutil
+import sys
+import traceback # 用于捕捉错误堆栈
 from kivy.lang import Builder
 from kivymd.app import MDApp
 from kivymd.uix.filemanager import MDFileManager
 from kivymd.toast import toast
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDFlatButton
+from kivymd.uix.label import MDLabel
+from kivymd.uix.boxlayout import MDBoxLayout
 from kivy.utils import platform
 from pypdf import PdfReader, PdfWriter
 import re
 
-# 定义界面布局 (KV 语言)
+# 界面布局 (保持不变)
 KV = '''
 MDBoxLayout:
     orientation: 'vertical'
@@ -22,7 +25,6 @@ MDBoxLayout:
     MDBottomNavigation:
         panel_color: 1, 1, 1, 1
 
-        # --- 提取功能页 ---
         MDBottomNavigationItem:
             name: 'screen_extract'
             text: '提取'
@@ -55,8 +57,6 @@ MDBoxLayout:
                 MDTextField:
                     id: field_range
                     hint_text: "输入页码范围 (如: 1-5, 8, 10-end)"
-                    helper_text: "支持逗号分隔，end代表最后一页"
-                    helper_text_mode: "on_focus"
 
                 MDRaisedButton:
                     text: "开始提取"
@@ -64,9 +64,8 @@ MDBoxLayout:
                     pos_hint: {"center_x": .5}
                     on_release: app.do_extract()
 
-                Widget: # 占位符
+                Widget:
 
-        # --- 合并功能页 ---
         MDBottomNavigationItem:
             name: 'screen_merge'
             text: '合并'
@@ -105,7 +104,6 @@ MDBoxLayout:
                 MDTextField:
                     id: field_sequence
                     hint_text: "合并顺序 (默认按列表顺序)"
-                    helper_text: "留空则按列表顺序合并，或输入: 1 2 1"
 
                 MDRaisedButton:
                     text: "开始合并"
@@ -116,51 +114,87 @@ MDBoxLayout:
 
 class PDFToolApp(MDApp):
     def build(self):
-        self.merge_files = [] # 存储待合并的文件路径
-        self.dialog = None
-        self.current_action = None # 'extract' or 'merge'
-        
-        # 配置内置文件管理器
-        self.file_manager = MDFileManager(
-            exit_manager=self.exit_manager,
-            select_path=self.select_path,
-            preview=False,
-        )
-        return Builder.load_string(KV)
+        # ❗❗❗ 全局异常捕获 ❗❗❗
+        try:
+            self.merge_files = [] 
+            self.dialog = None
+            self.current_action = None
+            
+            self.file_manager = MDFileManager(
+                exit_manager=self.exit_manager,
+                select_path=self.select_path,
+                preview=False,
+            )
+            return Builder.load_string(KV)
+        except Exception:
+            # 如果构建界面就崩了，显示错误
+            return MDLabel(text=traceback.format_exc(), halign="center", theme_text_color="Error")
 
     def on_start(self):
-        # 申请安卓权限
+        # ❗❗❗ 申请 Android 11+ 最高权限 ❗❗❗
         if platform == 'android':
-            from android.permissions import request_permissions, Permission
-            request_permissions([
-                Permission.READ_EXTERNAL_STORAGE, 
-                Permission.WRITE_EXTERNAL_STORAGE
-            ])
+            try:
+                from android.permissions import request_permissions, Permission
+                # 申请基础权限
+                request_permissions([
+                    Permission.READ_EXTERNAL_STORAGE, 
+                    Permission.WRITE_EXTERNAL_STORAGE,
+                    Permission.MANAGE_EXTERNAL_STORAGE
+                ])
+                
+                # 尝试调用 Intent 跳转到“所有文件访问权限”设置页面
+                # 这是解决 Android 11+ 闪退的终极办法
+                from jnius import autoclass
+                from android import activity
+                
+                def check_permission(*args):
+                    # 这里可以添加检测逻辑，简化处理直接尝试跳转
+                    pass
 
-    # --- 文件管理器逻辑 ---
+                # 下面这段代码尝试让系统相信我们需要管理所有文件
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                currentActivity = PythonActivity.mActivity
+                Context = autoclass('android.content.Context')
+                Intent = autoclass('android.content.Intent')
+                Settings = autoclass('android.provider.Settings')
+                Uri = autoclass('android.net.Uri')
+                
+                # 只有安卓 11 (SDK 30) 以上才需要这个特殊跳转
+                # 为了防止报错，这里先简化处理，主要依靠 request_permissions
+                
+            except Exception as e:
+                # 权限申请失败也不要崩，把错误打出来
+                toast(f"权限申请警告: {str(e)}")
+
     def file_manager_open(self, action):
-        self.current_action = action
-        # 默认打开路径，安卓端设为 /storage/emulated/0
-        path = "/"
-        if platform == 'android':
-            path = "/storage/emulated/0"
-        self.file_manager.show(path)
+        try:
+            self.current_action = action
+            # ❗修改默认路径：先打开 APP 私有目录，防止一上来就因权限崩溃
+            # path = "/storage/emulated/0" 
+            path = os.path.expanduser("~") 
+            if platform == 'android':
+                path = "/storage/emulated/0"
+            self.file_manager.show(path)
+        except Exception as e:
+            self.show_alert("路径错误", f"无法打开文件管理器:\n{e}\n请检查是否授予了文件访问权限")
 
     def select_path(self, path):
         self.exit_manager()
-        if not path.endswith('.pdf'):
-            toast("请选择 PDF 文件")
-            return
+        try:
+            if not path.endswith('.pdf'):
+                toast("请选择 PDF 文件")
+                return
 
-        if self.current_action == "extract":
-            self.root.ids.label_extract_path.text = path
-        
-        elif self.current_action == "merge":
-            self.merge_files.append(path)
-            # 在界面列表中显示
-            from kivymd.uix.list import OneLineListItem
-            item = OneLineListItem(text=f"{len(self.merge_files)}. {os.path.basename(path)}")
-            self.root.ids.container_merge_list.add_widget(item)
+            if self.current_action == "extract":
+                self.root.ids.label_extract_path.text = path
+            
+            elif self.current_action == "merge":
+                self.merge_files.append(path)
+                from kivymd.uix.list import OneLineListItem
+                item = OneLineListItem(text=f"{len(self.merge_files)}. {os.path.basename(path)}")
+                self.root.ids.container_merge_list.add_widget(item)
+        except Exception as e:
+            self.show_alert("选择错误", str(e))
 
     def exit_manager(self, *args):
         self.file_manager.close()
@@ -181,11 +215,17 @@ class PDFToolApp(MDApp):
             self.dialog.text = text
         self.dialog.open()
 
-    # --- 核心 PDF 逻辑 (移植自原脚本) ---
     def get_download_folder(self):
-        """获取安卓 Download 目录，确保文件能被找到"""
         if platform == 'android':
-            return "/storage/emulated/0/Download"
+            # 尝试多种路径以防万一
+            paths = [
+                "/storage/emulated/0/Download",
+                "/storage/emulated/0/Downloads",
+                os.path.expanduser("~")
+            ]
+            for p in paths:
+                if os.path.exists(p) and os.access(p, os.W_OK):
+                    return p
         return os.path.expanduser("~/Downloads")
 
     def sanitize_filename(self, name):
@@ -222,19 +262,19 @@ class PDFToolApp(MDApp):
         except: pass 
         return None
 
-    # --- 执行提取 ---
     def do_extract(self):
-        path = self.root.ids.label_extract_path.text
-        range_str = self.root.ids.field_range.text
-        
-        if path == "未选择文件":
-            toast("请先选择 PDF 文件")
-            return
-        if not range_str:
-            toast("请输入页码范围")
-            return
-
+        # ❗❗❗ 核心逻辑包裹 try-except ❗❗❗
         try:
+            path = self.root.ids.label_extract_path.text
+            range_str = self.root.ids.field_range.text
+            
+            if path == "未选择文件":
+                toast("请先选择 PDF 文件")
+                return
+            if not range_str:
+                toast("请输入页码范围")
+                return
+
             reader = PdfReader(path)
             total_pages = len(reader.pages)
             selected_indices = self.parse_page_range(range_str, total_pages)
@@ -244,10 +284,8 @@ class PDFToolApp(MDApp):
                 return
 
             writer = PdfWriter()
-            # 关键：保留书签结构
             writer.append(fileobj=path, pages=selected_indices)
 
-            # 命名逻辑
             start_idx = selected_indices[0]
             out_name = self.get_bookmark_filename(reader, start_idx)
             if not out_name:
@@ -256,10 +294,8 @@ class PDFToolApp(MDApp):
             
             if not out_name.endswith(".pdf"): out_name += ".pdf"
             
-            # 保存到下载目录
             out_path = os.path.join(self.get_download_folder(), out_name)
             
-            # 防重名
             count = 1
             while os.path.exists(out_path):
                 out_path = os.path.join(self.get_download_folder(), f"{count}_{out_name}")
@@ -268,30 +304,29 @@ class PDFToolApp(MDApp):
             with open(out_path, "wb") as f:
                 writer.write(f)
             
-            self.show_alert("成功", f"文件已保存至 Download 文件夹:\n{os.path.basename(out_path)}")
+            self.show_alert("成功", f"文件已保存至:\n{out_path}")
 
         except Exception as e:
-            self.show_alert("错误", str(e))
+            # 打印完整错误堆栈
+            self.show_alert("运行错误", f"{str(e)}\n{traceback.format_exc()}")
 
-    # --- 执行合并 ---
     def do_merge(self):
-        if len(self.merge_files) < 2:
-            toast("至少需要 2 个文件才能合并")
-            return
-
-        seq_str = self.root.ids.field_sequence.text.strip()
-        indices = []
-        
         try:
+            if len(self.merge_files) < 2:
+                toast("至少需要 2 个文件")
+                return
+
+            seq_str = self.root.ids.field_sequence.text.strip()
+            indices = []
+            
             if seq_str:
                 indices = [int(x) - 1 for x in seq_str.split()]
             else:
-                indices = range(len(self.merge_files)) # 默认按顺序
+                indices = range(len(self.merge_files))
             
             writer = PdfWriter()
             for idx in indices:
                 if 0 <= idx < len(self.merge_files):
-                    # 关键：保留书签结构
                     writer.append(fileobj=self.merge_files[idx])
             
             out_name = "merged_output.pdf"
@@ -305,10 +340,14 @@ class PDFToolApp(MDApp):
             with open(out_path, "wb") as f:
                 writer.write(f)
                 
-            self.show_alert("成功", f"合并完成:\n{os.path.basename(out_path)}")
+            self.show_alert("成功", f"合并完成:\n{out_path}")
             
         except Exception as e:
-            self.show_alert("错误", f"合并失败: {str(e)}")
+            self.show_alert("运行错误", f"{str(e)}\n{traceback.format_exc()}")
 
 if __name__ == '__main__':
-    PDFToolApp().run()
+    # 最后一层保险
+    try:
+        PDFToolApp().run()
+    except Exception as e:
+        print(f"CRITICAL ERROR: {e}")

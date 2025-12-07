@@ -1,6 +1,6 @@
 name: Build PDF Tool APK
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 允许手动点击触发
 
 jobs:
   build:
@@ -10,7 +10,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # 1. 清理空间 (这一步必须保留，否则空间不够)
+      # 🧹 清理空间：Kivy打包非常吃硬盘，这一步能避免"No space left"错误
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
         with:
@@ -21,35 +21,18 @@ jobs:
           large-packages: true
           swap-storage: true
 
-      # 2. 配置 Python 环境
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10' # 使用最稳定的 3.10 版本
-
-      # 3. 配置 Java 环境 (安卓打包必须)
-      - name: Setup Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      # 4. 安装 Buildozer 和系统依赖 (这是最关键的一步，手动安装，不依赖别人)
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libltdl-dev libffi-dev libssl-dev python3-dev zip unzip
-          pip install --upgrade pip
-          pip install buildozer cython==0.29.36
-
-      # 5. 开始打包 (yes 命令是为了自动同意安卓SDK的协议)
+      # 🏗️ 开始打包
+      # 使用社区修复版的 Action，解决官方镜像拉取失败的问题
       - name: Build with Buildozer
-        run: |
-          yes | buildozer android debug
+        uses: ArtemSBulgakov/buildozer-action@v1
+        id: buildozer
+        with:
+          command: buildozer android debug
+          buildozer_version: stable
 
-      # 6. 上传 APK
+      # 📤 上传结果
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: pdf-tool-apk
+          name: PDF_Tool_APK
           path: bin/*.apk

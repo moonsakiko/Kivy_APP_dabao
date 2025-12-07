@@ -12,8 +12,8 @@ requirements = python3, kivy==2.3.0, pypdf, pillow, android
 
 # ❗自定义图标与开屏配置
 # 只要你把图片放对了名字，这里就会自动生效
-icon.filename = icon.png
-presplash.filename = presplash.png
+#icon.filename = icon.png
+#presplash.filename = presplash.png
 
 # ❗开屏背景色
 # 如果你的开屏图不是全屏填满的，边缘显示的颜色。设为白色最稳。

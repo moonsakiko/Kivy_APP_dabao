@@ -1,49 +1,36 @@
-name: Stable Build
+name: Stable Build (Lite)
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    # 使用 Ubuntu 20.04 或 22.04，这两个版本编译 Python 最稳
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v3
 
-      # 1. 清理磁盘 (必须，否则编译到一半空间不足)
+      # 1. 强力清理磁盘 (这是救命稻草)
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
         with:
-          tool-cache: false
+          tool-cache: true      # 这里的 true 很重要，清理工具缓存
           android: true
           dotnet: true
           haskell: true
           large-packages: true
+          docker-images: true   # 清理 Docker 镜像释放巨大空间
           swap-storage: true
 
-      # 2. 手动安装依赖 (比第三方Action更稳)
+      # 2. 安装系统级依赖 (防止 OpenSSL 编译出错)
       - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential \
-            libltdl-dev \
-            libffi-dev \
-            libssl-dev \
-            python3-dev \
-            python3-setuptools \
-            zip \
-            unzip \
-            autoconf \
-            libtool \
-            pkg-config \
-            zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
-            libtinfo5 \
-            cmake \
-            libffi-dev
+            build-essential libltdl-dev libffi-dev libssl-dev \
+            python3-dev python3-setuptools zip unzip \
+            autoconf libtool pkg-config zlib1g-dev \
+            libncurses5-dev libncursesw5-dev libtinfo5 cmake
 
       # 3. 安装 Buildozer
       - name: Install Buildozer
@@ -51,13 +38,14 @@ jobs:
           pip3 install --upgrade pip
           pip3 install buildozer cython==0.29.36
 
-      # 4. 开始打包 (yes | ... 自动同意SDK协议)
-      # 这里加 verbose 可以在 Github 后台看到详细日志
+      # 4. 开始打包
+      # yes 命令自动同意协议
+      # 只打 arm64-v8a 会快很多
       - name: Build APK
         run: |
           yes | buildozer android debug verbose
 
-      # 5. 上传
+      # 5. 上传 APK
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:

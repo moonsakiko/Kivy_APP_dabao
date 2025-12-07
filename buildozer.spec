@@ -1,19 +1,19 @@
 [app]
-title = PDF Tool Pro
-package.name = pdftoolpro
-package.domain = org.pro
+title = PDF Tool Final
+package.name = pdftoolfinal
+package.domain = org.final
 source.dir = .
-# ❗关键：加入 ttf 后缀，否则字体不会被打包
+# ❗关键：一定要包含 ttf
 source.include_exts = py,png,jpg,kv,atlas,ttf
-version = 4.0
+version = 5.0
 
-# ❗关键配合：Kivy 2.2.0 (稳) + KivyMD 1.1.1 (美)
-requirements = python3, kivy==2.2.0, kivymd==1.1.1, pypdf, pillow, android
+# ❗关键：剔除 kivymd，只用稳如泰山的 kivy 2.2.0
+requirements = python3, kivy==2.2.0, pypdf, pillow, android
 
 orientation = portrait
 fullscreen = 0
-# 启动图颜色改为 KivyMD 的深蓝色，显得专业
-android.presplash_color = #1E1E1E
+# 启动图改为深灰色，看起来高级点
+android.presplash_color = #222222
 
 # 权限
 android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE

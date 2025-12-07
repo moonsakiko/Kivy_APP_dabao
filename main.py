@@ -1,6 +1,6 @@
 import os
-import sys
-import traceback # 用于捕捉错误堆栈
+import traceback
+from kivy.clock import Clock # 引入时钟，用于延迟执行
 from kivy.lang import Builder
 from kivymd.app import MDApp
 from kivymd.uix.filemanager import MDFileManager
@@ -8,7 +8,6 @@ from kivymd.toast import toast
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDFlatButton
 from kivymd.uix.label import MDLabel
-from kivymd.uix.boxlayout import MDBoxLayout
 from kivy.utils import platform
 from pypdf import PdfReader, PdfWriter
 import re
@@ -114,87 +113,66 @@ MDBoxLayout:
 
 class PDFToolApp(MDApp):
     def build(self):
-        # ❗❗❗ 全局异常捕获 ❗❗❗
-        try:
-            self.merge_files = [] 
-            self.dialog = None
-            self.current_action = None
-            
-            self.file_manager = MDFileManager(
-                exit_manager=self.exit_manager,
-                select_path=self.select_path,
-                preview=False,
-            )
-            return Builder.load_string(KV)
-        except Exception:
-            # 如果构建界面就崩了，显示错误
-            return MDLabel(text=traceback.format_exc(), halign="center", theme_text_color="Error")
+        self.merge_files = [] 
+        self.dialog = None
+        self.current_action = None
+        self.file_manager = MDFileManager(
+            exit_manager=self.exit_manager,
+            select_path=self.select_path,
+            preview=False,
+        )
+        return Builder.load_string(KV)
 
     def on_start(self):
-        # ❗❗❗ 申请 Android 11+ 最高权限 ❗❗❗
+        # ❗❗❗ 核心修改：延迟1秒再申请权限，保证界面先显示出来 ❗❗❗
         if platform == 'android':
-            try:
-                from android.permissions import request_permissions, Permission
-                # 申请基础权限
-                request_permissions([
-                    Permission.READ_EXTERNAL_STORAGE, 
-                    Permission.WRITE_EXTERNAL_STORAGE,
-                    Permission.MANAGE_EXTERNAL_STORAGE
-                ])
-                
-                # 尝试调用 Intent 跳转到“所有文件访问权限”设置页面
-                # 这是解决 Android 11+ 闪退的终极办法
-                from jnius import autoclass
-                from android import activity
-                
-                def check_permission(*args):
-                    # 这里可以添加检测逻辑，简化处理直接尝试跳转
-                    pass
+            Clock.schedule_once(self.request_android_permissions, 1)
 
-                # 下面这段代码尝试让系统相信我们需要管理所有文件
-                PythonActivity = autoclass('org.kivy.android.PythonActivity')
-                currentActivity = PythonActivity.mActivity
-                Context = autoclass('android.content.Context')
-                Intent = autoclass('android.content.Intent')
-                Settings = autoclass('android.provider.Settings')
-                Uri = autoclass('android.net.Uri')
-                
-                # 只有安卓 11 (SDK 30) 以上才需要这个特殊跳转
-                # 为了防止报错，这里先简化处理，主要依靠 request_permissions
-                
-            except Exception as e:
-                # 权限申请失败也不要崩，把错误打出来
-                toast(f"权限申请警告: {str(e)}")
+    def request_android_permissions(self, *args):
+        """
+        使用最稳妥的字符串方式申请权限
+        """
+        try:
+            from android.permissions import request_permissions
+            
+            # 定义权限列表 (直接用字符串，不要用对象，这样绝对不会报错)
+            permissions = [
+                "android.permission.READ_EXTERNAL_STORAGE",
+                "android.permission.WRITE_EXTERNAL_STORAGE",
+                # 尝试申请管理权限，如果系统不支持会自动忽略，不会崩
+                "android.permission.MANAGE_EXTERNAL_STORAGE" 
+            ]
+
+            def callback(permissions, results):
+                # 权限回调，这里可以打印日志，暂时留空
+                pass
+
+            request_permissions(permissions, callback)
+            
+        except Exception as e:
+            toast(f"权限申请异常: {str(e)}")
+
+    # --- 以下逻辑保持不变 ---
 
     def file_manager_open(self, action):
-        try:
-            self.current_action = action
-            # ❗修改默认路径：先打开 APP 私有目录，防止一上来就因权限崩溃
-            # path = "/storage/emulated/0" 
-            path = os.path.expanduser("~") 
-            if platform == 'android':
-                path = "/storage/emulated/0"
-            self.file_manager.show(path)
-        except Exception as e:
-            self.show_alert("路径错误", f"无法打开文件管理器:\n{e}\n请检查是否授予了文件访问权限")
+        self.current_action = action
+        # 默认路径设为 Download，避免根目录权限问题
+        path = self.get_download_folder()
+        self.file_manager.show(path)
 
     def select_path(self, path):
         self.exit_manager()
-        try:
-            if not path.endswith('.pdf'):
-                toast("请选择 PDF 文件")
-                return
+        if not path.endswith('.pdf'):
+            toast("请选择 PDF 文件")
+            return
 
-            if self.current_action == "extract":
-                self.root.ids.label_extract_path.text = path
-            
-            elif self.current_action == "merge":
-                self.merge_files.append(path)
-                from kivymd.uix.list import OneLineListItem
-                item = OneLineListItem(text=f"{len(self.merge_files)}. {os.path.basename(path)}")
-                self.root.ids.container_merge_list.add_widget(item)
-        except Exception as e:
-            self.show_alert("选择错误", str(e))
+        if self.current_action == "extract":
+            self.root.ids.label_extract_path.text = path
+        elif self.current_action == "merge":
+            self.merge_files.append(path)
+            from kivymd.uix.list import OneLineListItem
+            item = OneLineListItem(text=f"{len(self.merge_files)}. {os.path.basename(path)}")
+            self.root.ids.container_merge_list.add_widget(item)
 
     def exit_manager(self, *args):
         self.file_manager.close()
@@ -217,15 +195,7 @@ class PDFToolApp(MDApp):
 
     def get_download_folder(self):
         if platform == 'android':
-            # 尝试多种路径以防万一
-            paths = [
-                "/storage/emulated/0/Download",
-                "/storage/emulated/0/Downloads",
-                os.path.expanduser("~")
-            ]
-            for p in paths:
-                if os.path.exists(p) and os.access(p, os.W_OK):
-                    return p
+            return "/storage/emulated/0/Download"
         return os.path.expanduser("~/Downloads")
 
     def sanitize_filename(self, name):
@@ -263,7 +233,6 @@ class PDFToolApp(MDApp):
         return None
 
     def do_extract(self):
-        # ❗❗❗ 核心逻辑包裹 try-except ❗❗❗
         try:
             path = self.root.ids.label_extract_path.text
             range_str = self.root.ids.field_range.text
@@ -295,7 +264,6 @@ class PDFToolApp(MDApp):
             if not out_name.endswith(".pdf"): out_name += ".pdf"
             
             out_path = os.path.join(self.get_download_folder(), out_name)
-            
             count = 1
             while os.path.exists(out_path):
                 out_path = os.path.join(self.get_download_folder(), f"{count}_{out_name}")
@@ -304,11 +272,10 @@ class PDFToolApp(MDApp):
             with open(out_path, "wb") as f:
                 writer.write(f)
             
-            self.show_alert("成功", f"文件已保存至:\n{out_path}")
+            self.show_alert("成功", f"保存至 Download:\n{os.path.basename(out_path)}")
 
         except Exception as e:
-            # 打印完整错误堆栈
-            self.show_alert("运行错误", f"{str(e)}\n{traceback.format_exc()}")
+            self.show_alert("错误", str(e))
 
     def do_merge(self):
         try:
@@ -318,7 +285,6 @@ class PDFToolApp(MDApp):
 
             seq_str = self.root.ids.field_sequence.text.strip()
             indices = []
-            
             if seq_str:
                 indices = [int(x) - 1 for x in seq_str.split()]
             else:
@@ -331,7 +297,6 @@ class PDFToolApp(MDApp):
             
             out_name = "merged_output.pdf"
             out_path = os.path.join(self.get_download_folder(), out_name)
-            
             count = 1
             while os.path.exists(out_path):
                 out_path = os.path.join(self.get_download_folder(), f"merged_{count}.pdf")
@@ -340,14 +305,9 @@ class PDFToolApp(MDApp):
             with open(out_path, "wb") as f:
                 writer.write(f)
                 
-            self.show_alert("成功", f"合并完成:\n{out_path}")
-            
+            self.show_alert("成功", f"合并完成:\n{os.path.basename(out_path)}")
         except Exception as e:
-            self.show_alert("运行错误", f"{str(e)}\n{traceback.format_exc()}")
+            self.show_alert("错误", str(e))
 
 if __name__ == '__main__':
-    # 最后一层保险
-    try:
-        PDFToolApp().run()
-    except Exception as e:
-        print(f"CRITICAL ERROR: {e}")
+    PDFToolApp().run()

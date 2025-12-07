@@ -1,65 +1,36 @@
-name: Stable Build
-on:
-  workflow_dispatch:
+[app]
+title = My Stable App
+package.name = myapp
+package.domain = org.test
+source.dir = .
+source.include_exts = py,png,jpg,kv,atlas,ttf
+version = 1.0
 
-jobs:
-  build:
-    # 使用 Ubuntu 20.04 或 22.04，这两个版本编译 Python 最稳
-    runs-on: ubuntu-22.04
+# ❗❗❗ 核心修改区 ❗❗❗
+# 1. 加上 typing-extensions (pypdf 必崩之源)
+# 2. 加上 pillow (图片处理必须)
+# 3. 加上 certifi (SSL证书，虽然你可能没用，加上防报错)
+# 4. 指定 kivy 版本以防版本冲突
+requirements = python3, kivy==2.2.1, pypdf, pillow, typing-extensions, certifi, idna, charset-normalizer, urllib3, android
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+# 屏幕方向
+orientation = portrait
+fullscreen = 0
 
-      # 1. 清理磁盘 (必须，否则编译到一半空间不足)
-      - name: Free Disk Space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          swap-storage: true
+# 权限 (注意：安卓10+ 需要在 main.py 里动态申请)
+android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
 
-      # 2. 手动安装依赖 (比第三方Action更稳)
-      - name: Install System Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            libltdl-dev \
-            libffi-dev \
-            libssl-dev \
-            python3-dev \
-            python3-setuptools \
-            zip \
-            unzip \
-            autoconf \
-            libtool \
-            pkg-config \
-            zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
-            libtinfo5 \
-            cmake \
-            libffi-dev
+# 安卓 API 配置 (保持稳定)
+android.api = 33
+android.minapi = 21
+android.ndk_api = 21
 
-      # 3. 安装 Buildozer
-      - name: Install Buildozer
-        run: |
-          pip3 install --upgrade pip
-          pip3 install buildozer cython==0.29.36
+# 架构 (现在的手机基本都是 arm64-v8a，但也加上 v7a 兼容旧手机)
+android.archs = arm64-v8a, armeabi-v7a
 
-      # 4. 开始打包 (yes | ... 自动同意SDK协议)
-      # 这里加 verbose 可以在 Github 后台看到详细日志
-      - name: Build APK
-        run: |
-          yes | buildozer android debug verbose
+# 启动图优化 (防止启动白屏太久)
+android.presplash_color = #000000
 
-      # 5. 上传
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-debug
-          path: bin/*.apk
+[buildozer]
+log_level = 2
+warn_on_root = 1

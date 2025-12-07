@@ -10,7 +10,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # 1. 清理空间 (Kivy打包非常吃硬盘，这一步不能省)
+      # 1. 清理空间 (这一步必须保留，否则空间不够)
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
         with:
@@ -21,16 +21,33 @@ jobs:
           large-packages: true
           swap-storage: true
 
-      # 2. 开始打包
-      # ⚠️ 之前报错是因为这里多了个 "-v1"，现在修正了
-      - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        id: buildozer
+      # 2. 配置 Python 环境
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          command: buildozer android debug
-          buildozer_version: stable
+          python-version: '3.10' # 使用最稳定的 3.10 版本
 
-      # 3. 上传 APK
+      # 3. 配置 Java 环境 (安卓打包必须)
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # 4. 安装 Buildozer 和系统依赖 (这是最关键的一步，手动安装，不依赖别人)
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libltdl-dev libffi-dev libssl-dev python3-dev zip unzip
+          pip install --upgrade pip
+          pip install buildozer cython==0.29.36
+
+      # 5. 开始打包 (yes 命令是为了自动同意安卓SDK的协议)
+      - name: Build with Buildozer
+        run: |
+          yes | buildozer android debug
+
+      # 6. 上传 APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

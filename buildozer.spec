@@ -13,8 +13,8 @@ requirements = python3, kivy==2.3.0, pypdf, pillow, android
 android.archs = arm64-v8a, armeabi-v7a
 
 # 启用自定义图片（如果你仓库里有这两个文件，就取消注释，否则保持注释）
-# icon.filename = icon.png
-# presplash.filename = presplash.png
+icon.filename = icon.png
+presplash.filename = presplash.png
 
 # 启动图背景色：纯白
 android.presplash_color = #FFFFFF

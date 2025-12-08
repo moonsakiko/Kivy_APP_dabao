@@ -3,15 +3,13 @@ title = PDF Master Debug
 package.name = pdfmasterdebug
 package.domain = org.master
 source.dir = .
-# ❗只包含最基础的后缀，确保 clean
 source.include_exts = py,png,jpg,kv,atlas,ttf
-version = 11.0
+version = 12.0
 
-# ❗关键回退：Kivy 2.2.0 (最稳版本)
-# ❗移除了 pillow，减少崩溃源
+# ❗移除 pillow，保留最简依赖
 requirements = python3, kivy==2.2.0, pypdf, android
 
-# 保持默认图标，排除图片错误干扰
+# ❗暂时注释掉图片，先跑通代码
 # icon.filename = icon.png
 # presplash.filename = presplash.png
 
@@ -24,7 +22,10 @@ android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
 android.api = 33
 android.minapi = 21
 android.ndk_api = 21
-android.archs = arm64-v8a, armeabi-v7a
+
+# ❗❗❗ 极速编译修改：只打包 64 位架构 ❗❗❗
+# 这会让打包速度快一倍，且绝大多数现代手机都能装
+android.archs = arm64-v8a
 
 [buildozer]
 log_level = 2

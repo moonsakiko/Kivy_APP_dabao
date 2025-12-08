@@ -108,7 +108,7 @@ class PDFApp(App):
         
         # 步骤1
         card.add_widget(Label(text="步骤 1: 导入文件", color=(0.4,0.4,0.4,1), size_hint_y=None, height='20dp', halign='left', text_size=(500, None), **f_title))
-        self.path_btn = ProButton(text="📂 点击选择 PDF", bg_color=(0.92, 0.94, 0.96, 1))
+        self.path_btn = ProButton(text="点击选择 PDF", bg_color=(0.92, 0.94, 0.96, 1))
         self.path_btn.label.color = (0.2, 0.4, 0.7, 1) # 按钮文字变深色
         self.path_btn.bind(on_release=self.open_picker)
         card.add_widget(self.path_btn)
@@ -126,7 +126,7 @@ class PDFApp(App):
         layout.add_widget(card)
 
         # 5. 底部操作区
-        self.btn_run = ProButton(text="🚀 开始极速提取", bg_color=(0.1, 0.4, 0.9, 1))
+        self.btn_run = ProButton(text="开始极速提取", bg_color=(0.1, 0.4, 0.9, 1))
         self.btn_run.bind(on_release=self.do_extract)
         layout.add_widget(self.btn_run)
 
@@ -220,7 +220,7 @@ class PDFApp(App):
             out.close()
             
             self.cached_pdf_path = cache
-            self.path_btn.label.text = "✅ PDF 文件已就绪"
+            self.path_btn.label.text = "PDF 文件已就绪"
             self.path_btn.label.color = (0.1, 0.6, 0.2, 1)
             self.log("文件加载成功！", "SUCCESS")
         except Exception as e:

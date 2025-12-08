@@ -1,19 +1,23 @@
 [app]
-title = PDF Master Safe
-package.name = pdfmastersafe
+title = PDF Master Pro
+package.name = pdfmasterpro
 package.domain = org.master
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf
-version = 13.0
+version = 14.0
 
-# ❗依赖：标准稳定版
-requirements = python3, kivy==2.2.0, pypdf, android
+# ❗升级回 Kivy 2.3.0，享受流畅体验
+requirements = python3, kivy==2.3.0, pypdf, pillow, android
 
-# ❗架构：改回双架构，牺牲体积换取绝对稳定
+# ❗开启双架构，彻底根治白屏
 android.archs = arm64-v8a, armeabi-v7a
 
-# 启动图颜色：改回黑色，方便区分白屏是不是因为APP没加载
-android.presplash_color = #000000
+# 启用自定义图片（如果你仓库里有这两个文件，就取消注释，否则保持注释）
+# icon.filename = icon.png
+# presplash.filename = presplash.png
+
+# 启动图背景色：纯白
+android.presplash_color = #FFFFFF
 
 orientation = portrait
 fullscreen = 0
